@@ -1,0 +1,109 @@
+{
+  "sizes": {
+    "train": 10269,
+    "valid": 1284,
+    "test": 1283
+  },
+  "label_dist": {
+    "train": {
+      "pants-fire": 842,
+      "false": 1998,
+      "barely-true": 1657,
+      "half-true": 2123,
+      "mostly-true": 1966,
+      "true": 1683
+    },
+    "valid": {
+      "pants-fire": 116,
+      "false": 263,
+      "barely-true": 237,
+      "half-true": 248,
+      "mostly-true": 251,
+      "true": 169
+    },
+    "test": {
+      "pants-fire": 92,
+      "false": 250,
+      "barely-true": 214,
+      "half-true": 267,
+      "mostly-true": 249,
+      "true": 211
+    }
+  },
+  "label_pct_train": {
+    "pants-fire": 8.2,
+    "false": 19.5,
+    "barely-true": 16.1,
+    "half-true": 20.7,
+    "mostly-true": 19.1,
+    "true": 16.4
+  },
+  "missing_pct": {
+    "speaker": 0.0,
+    "job": 27.84,
+    "state": 21.43,
+    "party": 0.0,
+    "context": 1.0,
+    "subject": 0.0
+  },
+  "party_dist": {
+    "republican": 5687,
+    "democrat": 4150,
+    "none": 2185,
+    "organization": 265,
+    "independent": 182,
+    "newsmaker": 66,
+    "libertarian": 51,
+    "journalist": 49
+  },
+  "n_party_values": 24,
+  "dup_rows_any": 61,
+  "test_in_train_exact": 5,
+  "valid_in_train_exact": 7,
+  "dup_statements_conflicting_labels": 7,
+  "n_speakers": 3318,
+  "top_speakers": {
+    "barack-obama": 616,
+    "donald-trump": 344,
+    "hillary-clinton": 297,
+    "mitt-romney": 216,
+    "john-mccain": 189
+  },
+  "speakers_with_1_stmt": 2056,
+  "share_rows_top10_speakers": 19.5,
+  "test_rows_seen_speaker_pct": 84.4,
+  "pct_rows_own_label_count_ge1": {
+    "pants-fire": 100.0,
+    "false": 99.1,
+    "barely-true": 100.0,
+    "half-true": 99.5,
+    "mostly-true": 100.0
+  },
+  "pct_rows_other_label_count_ge1": {
+    "pants-fire": 68.4,
+    "false": 63.2,
+    "barely-true": 64.4,
+    "half-true": 62.8,
+    "mostly-true": 61.6
+  },
+  "single_stmt_speakers_checked": 1701,
+  "single_stmt_history_equals_own_label_pct": 99.3,
+  "single_stmt_history_all_zero_pct": 0.7,
+  "rows_history_all_zero_pct": 3.2,
+  "disjoint_sizes": {
+    "train": 10270,
+    "valid": 1283,
+    "test": 1283
+  },
+  "disjoint_overlap_check": 0,
+  "disjoint_test_label_pct": {
+    "pants-fire": 8.1,
+    "false": 20.1,
+    "barely-true": 19.5,
+    "half-true": 20.7,
+    "mostly-true": 16.8,
+    "true": 14.9
+  },
+  "stmt_words_mean": 17.9,
+  "stmt_words_median": 17
+}
