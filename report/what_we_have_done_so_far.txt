@@ -1,0 +1,63 @@
+4 WHAT WE HAVE DONE SO FAR
+
+4.1 Dataset Preparation and Analysis
+
+We built a single data pipeline that every model uses. It loads the official LIAR train, validation, and test files from the Kaggle copy, which we confirmed is byte-identical to the original LIAR v1.0 release (matching MD5 checksums). The loader reads the TSV files without quote parsing, since several statements contain unbalanced quotes. It lowercases party, casts the credit counts to integers, and adds the binary false-leaning / true-leaning label from Section 2. The audit in Section 3 (class balance, missing fields, duplicates, speaker frequency) is computed by this pipeline and saved to a results file, so the numbers in the report are regenerated rather than typed by hand.
+
+Leakage check and correction. The LIAR README itself states that the credit history counts include the statement being classified. We confirmed this in three ways. For each label with a count column, 99.1 to 100% of statements have a count of at least 1 in their own label's column, versus 62 to 68% for any other label. Of the 1,701 single-statement speakers whose label has a column, 99.3% have a history that is exactly one count in their own label. And 407 statements (3.2%) have an all-zero history, of which 96.6% are labeled true. Since true has no column, an empty history reveals the true label by absence. We implemented a corrected history that subtracts one from the count matching each statement's own label. After correction, single-statement speakers have an empty history. Every metadata experiment is run with both the raw and the corrected history.
+
+Speaker-disjoint split. We built a split where no speaker appears in more than one partition. Speakers are shuffled with a fixed seed and assigned to test, then validation, until each holds about 10% of statements. The three largest speakers (Obama, Trump, Clinton), each over 2% of the data, stay in training so a single speaker cannot dominate the test set. The result has 10,270 / 1,283 / 1,283 statements, zero speaker overlap, and a label distribution close to the official split.
+
+
+4.2 Classical Machine-Learning Baseline
+
+Setup. Statements are represented with TF-IDF over word unigrams and bigrams (minimum document frequency 2, sublinear term frequency, up to 50,000 features). Party, speaker, job, state, and normalized context are one-hot encoded, with rare categories grouped. Subjects are multi-hot. The credit history becomes five label proportions, log(1 + total count), and an empty-history flag. We train multinomial logistic regression with balanced class weights and pick the regularization strength C from {0.25, 0.5, 1, 2, 4} by validation macro-F1. Each final model is evaluated once on test. We run five feature sets on both splits and both tasks.
+
+Table 2. TF-IDF + logistic regression, test set. Macro-F1, with accuracy in parentheses. Raw = credit history as released. Corr = the statement's own label removed from the history.
+Condition	Official 6-way	Official binary	Disjoint 6-way	Disjoint binary
+Text only	0.254 (0.254)	0.631 (0.635)	0.227 (0.230)	0.605 (0.605)
+Text + meta (raw)	0.418 (0.414)	0.735 (0.740)	0.406 (0.416)	0.695 (0.696)
+Text + meta (corr)	0.266 (0.267)	0.636 (0.646)	0.225 (0.231)	0.607 (0.611)
+Text + meta (no credit)	0.255 (0.256)	0.635 (0.645)	0.225 (0.238)	0.617 (0.620)
+Meta only (corr)	0.279 (0.280)	0.618 (0.627)	0.201 (0.204)	0.564 (0.571)
+
+Results. With 1,283 test statements, the 95% interval on accuracy is about +/- 0.024, so we treat smaller differences as noise. Text alone reaches 0.254 macro-F1 on six-way and 0.631 on binary. Adding metadata with the raw history jumps six-way macro-F1 to 0.418. With the corrected history, the same model gets only 0.266, and dropping the history entirely gives 0.255. So about 93% of the apparent six-way metadata gain (0.152 of 0.164) comes from the statement's own label leaking into its features.
+
+The speaker-disjoint split tells the same story. Raw metadata still scores 0.406, because new speakers often have short histories that are almost pure label. With the correction, text + metadata (0.225) is no better than text alone (0.227). Metadata alone beats text on the official split (0.279) but falls to 0.201 on unseen speakers. This suggests that, once leakage is removed, metadata mostly tells the model which speaker is talking, and that signal does not transfer to new speakers.
+
+
+4.3 Transformer Models
+
+Setup. We fine-tune pretrained transformers on the statement text alone using HuggingFace Transformers, starting with RoBERTa-base. A linear classification head is added on top of the first token, and the model is trained with cross-entropy for 4 epochs. We use AdamW (weight decay 0.01), a linear schedule with 10% warmup, batch size 32, a maximum length of 160 tokens, and mixed precision. Training runs on a single NVIDIA RTX 4060 laptop GPU and takes about 4 minutes per run. We try learning rates of 1e-5, 2e-5, and 3e-5, keep the epoch with the best validation macro-F1, and select the learning rate by validation macro-F1. The selected model is evaluated once on the official test set with the same metrics as the baseline. The seed is fixed at 412.
+
+Table 3. RoBERTa-base, text only, official split, six-way. Macro-F1 and accuracy. The row in bold is the one selected by validation.
+Model	Learning rate	Val macro-F1	Test macro-F1	Test accuracy
+TF-IDF + LR (text only)	n/a	n/a	0.254	0.254
+RoBERTa-base	1e-5	0.278	0.295	0.293
+RoBERTa-base (selected)	2e-5	0.280	0.284	0.292
+RoBERTa-base	3e-5	0.279	0.283	0.279
+
+Results. The selected RoBERTa-base model reaches 0.284 test macro-F1 and 0.292 accuracy, 0.030 macro-F1 above TF-IDF + logistic regression on the same text. The gain is modest, but every learning rate we tried lands above the baseline (0.283 to 0.295), so it is not an artifact of one setting. Validation scores are nearly identical across learning rates (0.278 to 0.280), so the model is not sensitive to this choice. Per-class F1 ranges from 0.212 (barely-true) to 0.341 (false). The largest gain over the baseline is on half-true (0.284 vs 0.207). The middle labels remain the hardest to separate, which matches the confusion between neighboring labels we saw with logistic regression.
+
+Next. BERT-base (same learning-rate grid) and the large models (BERT-large and RoBERTa-large, learning rate 1e-5 with an effective batch of 16) are running now. We will add them, seed variation, and bootstrap confidence intervals in the final report.
+
+
+4.4 Metadata Integration
+
+Serializing metadata for transformers. To give the transformers the same information as the logistic regression model, we write each statement's metadata as text and prepend it to the statement, separated by a double bar. Missing job, state, and context fields are left out rather than written as empty. For example, a training statement labeled half-true becomes:
+
+speaker: scott surovell | party: democrat | job: State delegate | state: Virginia | context: a floor speech. | subject: energy, history, job-accomplishments | history: pants-fire 0, false 0, barely-true 0, half-true 0, mostly-true 1 || When did the decline of coal start? ...
+
+In the raw data, this speaker's history has half-true 1, which is the statement's own label. The corrected version above sets it to 0. The serialization and training code is finished and tested. The transformer runs with raw and corrected metadata are next in our run queue.
+
+Field ablation. We started the ablation with logistic regression, since it is cheap to retrain. Table 4 removes one field at a time from the full corrected model, and also adds one field at a time to text alone. Once leakage is removed, no single field changes macro-F1 by more than about 0.035, close to the noise level. The corrected credit history is still the most useful single field (+0.017 when added alone). Context hurts: text + context drops to 0.219, and removing context from the full model raises it to 0.283. Its many sparse categories likely overfit, so we plan to group context into a few venue types. Our fine-tuning code supports the same leave-one-field-out ablation, which we will run on the best transformer.
+
+Table 4. Metadata field ablation with logistic regression, official split, six-way, corrected history. Test macro-F1. "Minus field" = all metadata except that field (full model = 0.266). "Text + field" = text plus only that field (text only = 0.254).
+Field	Minus field	Change	Text + field	Change
+party	0.247	-0.018	0.245	-0.009
+speaker	0.260	-0.005	0.262	+0.008
+job	0.269	+0.003	0.256	+0.002
+state	0.263	-0.002	0.256	+0.002
+context	0.283	+0.017	0.219	-0.035
+subject	0.272	+0.006	0.235	-0.019
+credit	0.255	-0.010	0.271	+0.017
