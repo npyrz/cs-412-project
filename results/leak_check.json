@@ -1,0 +1,17 @@
+{
+  "history_constant_within_speaker": 0.9968,
+  "official": {
+    "n_test": 1283,
+    "resolved_frac": 0.8363,
+    "acc": 0.8589243959469992,
+    "macro_f1": 0.8721584523435216,
+    "acc_on_resolved": 0.9972041006523765
+  },
+  "disjoint": {
+    "n_test": 1283,
+    "resolved_frac": 0.0,
+    "acc": 0.20654715510522215,
+    "macro_f1": 0.05706287683031869,
+    "acc_on_resolved": null
+  }
+}
