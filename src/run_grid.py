@@ -72,22 +72,28 @@ def main():
     OUT.mkdir(parents=True, exist_ok=True); LOG.parent.mkdir(parents=True, exist_ok=True)
     gpu = torch.cuda.get_device_name(0) if torch.cuda.is_available() else "NO GPU"
     log(f"start: {gpu}, {VRAM_GB:.1f} GB, phases {a.phases}")
-    if 1 in a.phases:   # text only, 6-way, official, lr grid for base models
-        for m in BASE:
-            for lr in [1e-5, 2e-5, 3e-5]: run(m, lr)
-        for m in LARGE: run(m, 1e-5)
-    if 2 in a.phases:   # text + metadata, corrected and raw credit
-        for m in BASE + LARGE:
-            lr = best_lr(m); run(m, lr, meta="all"); run(m, lr, meta="all", raw=True)
-    if 3 in a.phases:   # speaker-disjoint split
-        m = "roberta-base"; lr = best_lr(m)
-        run(m, lr, split="disjoint"); run(m, lr, meta="all", split="disjoint")
-        run(m, lr, meta="all", raw=True, split="disjoint")
-    if 4 in a.phases:   # binary, text only
-        for m in BASE + LARGE: run(m, best_lr(m), task="binary")
-    if 5 in a.phases:   # leave-one-field-out ablation
-        m = "roberta-base"; lr = best_lr(m)
-        for f in FIELDS: run(m, lr, meta="all", drop=f)
+    # Pass 1 runs every base-model experiment; pass 2 adds the slow large models.
+    for allowed in (BASE, BASE + LARGE):
+        def ok(m): return m in allowed
+        if 1 in a.phases:   # text only, 6-way, official, lr grid for base models
+            for m in BASE:
+                for lr in [1e-5, 2e-5, 3e-5]: run(m, lr)
+            for m in LARGE:
+                if ok(m): run(m, 1e-5)
+        if 2 in a.phases:   # text + metadata, corrected and raw credit
+            for m in BASE + LARGE:
+                if ok(m):
+                    lr = best_lr(m); run(m, lr, meta="all"); run(m, lr, meta="all", raw=True)
+        if 3 in a.phases:   # speaker-disjoint split
+            m = "roberta-base"; lr = best_lr(m)
+            run(m, lr, split="disjoint"); run(m, lr, meta="all", split="disjoint")
+            run(m, lr, meta="all", raw=True, split="disjoint")
+        if 4 in a.phases:   # binary, text only
+            for m in BASE + LARGE:
+                if ok(m): run(m, best_lr(m), task="binary")
+        if 5 in a.phases:   # leave-one-field-out ablation
+            m = "roberta-base"; lr = best_lr(m)
+            for f in FIELDS: run(m, lr, meta="all", drop=f)
     log("ALL DONE")
 
 

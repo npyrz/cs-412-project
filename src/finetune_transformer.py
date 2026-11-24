@@ -65,6 +65,7 @@ def main():
     ap.add_argument("--seed", type=int, default=412)
     ap.add_argument("--out-dir", default="", help="where result JSON goes (default results/transformers)")
     ap.add_argument("--keep-checkpoints", action="store_true")
+    ap.add_argument("--bf16", action="store_true", help="bf16 instead of fp16 (default for *-large on GPUs that support it)")
     a = ap.parse_args()
 
     tr, va, te = (load_split(s) for s in ["train", "valid", "test"])
@@ -91,6 +92,8 @@ def main():
 
     name = (f"{a.model.split('/')[-1]}_{a.meta}{'-' + a.drop if a.drop else ''}"
             f"{'_rawcredit' if a.raw_credit else ''}_{a.split}_{a.task}_lr{a.lr:g}_s{a.seed}")
+    cuda = torch.cuda.is_available()
+    use_bf16 = cuda and torch.cuda.is_bf16_supported() and (a.bf16 or "large" in a.model)
     args = TrainingArguments(
         output_dir=str(ROOT / "checkpoints" / name), learning_rate=a.lr,
         per_device_train_batch_size=a.bs, gradient_accumulation_steps=a.grad_accum,
@@ -99,7 +102,7 @@ def main():
         warmup_steps=int(0.1 * a.epochs * -(-len(dtr) // (a.bs * a.grad_accum))),  # 10% warmup; works on transformers 4.x and 5.x
         eval_strategy="epoch", save_strategy="epoch", load_best_model_at_end=True,
         metric_for_best_model="macro_f1", save_total_limit=1, seed=a.seed,
-        fp16=torch.cuda.is_available(), report_to="none", logging_steps=50)
+        fp16=cuda and not use_bf16, bf16=use_bf16, report_to="none", logging_steps=50)
     trainer = Trainer(model=model, args=args, train_dataset=dtr, eval_dataset=dva,
                       processing_class=tok, data_collator=DataCollatorWithPadding(tok),
                       compute_metrics=compute)
@@ -117,6 +120,7 @@ def main():
            "per_class": {l: {"p": pr[i], "r": rc[i], "f1": f1[i]} for i, l in enumerate(labels)},
            "val_macro_f1": trainer.state.best_metric, "val_history": val_hist,
            "train_runtime_s": train_out.metrics.get("train_runtime"),
+           "precision": "bf16" if use_bf16 else ("fp16" if cuda else "fp32"),
            "test_pred": pred.tolist()}
     d = Path(a.out_dir) if a.out_dir else ROOT / "results" / "transformers"
     d.mkdir(parents=True, exist_ok=True)
