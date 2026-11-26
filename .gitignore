@@ -1,0 +1,15 @@
+__pycache__/
+checkpoints/
+results/llm/cache_*.jsonl
+*.aux
+*.log
+*.bbl
+*.blg
+.venv/
+.hf_cache/
+logs/
+archive.zip
+data/*.tsv
+data/raw/*.tsv
+CLAUDE.local.md
+venv/

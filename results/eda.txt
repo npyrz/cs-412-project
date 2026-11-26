@@ -1,0 +1,73 @@
+LIAR dataset numbers (src/analyze_data.py). Official split unless noted.
+
+Rows: 12836 (train 10269, valid 1284, test 1283)
+
+Label counts (% of split):
+  label                  train           valid            test
+  pants-fire       842 ( 8.2%)     116 ( 9.0%)      92 ( 7.2%)
+  false           1998 (19.5%)     263 (20.5%)     250 (19.5%)
+  barely-true     1657 (16.1%)     237 (18.5%)     214 (16.7%)
+  half-true       2123 (20.7%)     248 (19.3%)     267 (20.8%)
+  mostly-true     1966 (19.1%)     251 (19.5%)     249 (19.4%)
+  true            1683 (16.4%)     169 (13.2%)     211 (16.4%)
+
+Missing metadata (% of all rows, filled with 'unknown'):
+  speaker   0.00%
+  job      27.85%
+  state    21.46%
+  party     0.00%
+  context   1.00%
+  subject   0.00%
+
+Duplicates (statement lowercased, punctuation removed):
+  rows whose statement appears more than once: 61
+  duplicated statements with different labels: 7
+  test rows whose statement is also in train: 5
+  valid rows whose statement is also in train: 7
+
+Speakers:
+  unique speakers: 3318
+  speakers with one statement: 2056
+  share of rows from the top 10 speakers: 19.5%
+  test rows whose speaker is also in train: 84.4%
+  top 20 speakers by statements:
+     1. barack-obama           616
+     2. donald-trump           344
+     3. hillary-clinton        297
+     4. mitt-romney            216
+     5. john-mccain            189
+     6. scott-walker           184
+     7. chain-email            178
+     8. rick-perry             173
+     9. marco-rubio            153
+    10. rick-scott             150
+    11. ted-cruz               119
+    12. bernie-s               107
+    13. chris-christie         105
+    14. facebook-posts         100
+    15. charlie-crist          90
+    16. newt-gingrich          83
+    17. blog-posting           81
+    18. jeb-bush               79
+    19. joe-biden              76
+    20. paul-ryan              70
+
+Party (24 values; top 8, rows):
+  republican      5687 (44.3%)
+  democrat        4150 (32.3%)
+  none            2185 (17.0%)
+  organization     265 ( 2.1%)
+  independent      182 ( 1.4%)
+  newsmaker         66 ( 0.5%)
+  libertarian       51 ( 0.4%)
+  journalist        49 ( 0.4%)
+
+Credit-history leak: % of rows (label != true) whose own-label count is >= 1:
+  train  99.7%
+  valid  99.9%
+  test   99.5%
+  by label: pants-fire 100.0%, false 99.1%, barely-true 100.0%, half-true 99.5%, mostly-true 100.0%
+  same rows, a different label's count >= 1: pants-fire 68.4%, false 63.2%, barely-true 64.4%, half-true 62.8%, mostly-true 61.6%
+
+Speaker-disjoint split (seed 412): train 10270, valid 1283, test 1283; speakers shared between parts: 0
+Statement length: mean 17.9 words, median 17
