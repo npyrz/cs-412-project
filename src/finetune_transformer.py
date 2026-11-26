@@ -8,6 +8,8 @@ Examples:
 
 Metadata is serialized as text and prepended to the statement, with the
 corrected credit history (own label removed) unless --raw-credit is passed.
+--meta-format v1 (default) is the format of all runs so far (speaker and subject included).
+--meta-format v2 is the shared team line from metadata.py (party, job, state, context, history).
 Results go to results/transformers/<run-name>.json.
 """
 import argparse
@@ -16,36 +18,41 @@ import shutil
 from pathlib import Path
 
 import numpy as np
-import pandas as pd
 import torch
 from sklearn.metrics import accuracy_score, f1_score, precision_recall_fscore_support
 from transformers import (AutoModelForSequenceClassification, AutoTokenizer,
                           DataCollatorWithPadding, Trainer, TrainingArguments)
 from datasets import Dataset
 
-from data import LABELS, correct_credit, load_split, speaker_disjoint
+import metadata
+from data import LABELS, MISSING, correct_credit, load_splits
 
 ROOT = Path(__file__).resolve().parent.parent
 FIELDS = ["party", "speaker", "job", "state", "context", "subject", "credit"]
 
 
 def serialize(r, fields):
+    """v1 format. Expects counts already corrected (or raw) in the count columns."""
+    def has(v): return v and v != MISSING
     bits = []
     if "speaker" in fields: bits.append(f"speaker: {r.speaker.replace('-', ' ')}")
     if "party" in fields: bits.append(f"party: {r.party}")
-    if "job" in fields and r.job: bits.append(f"job: {r.job}")
-    if "state" in fields and r.state: bits.append(f"state: {r.state}")
-    if "context" in fields and r.context: bits.append(f"context: {r.context}")
+    if "job" in fields and has(r.job): bits.append(f"job: {r.job}")
+    if "state" in fields and has(r.state): bits.append(f"state: {r.state}")
+    if "context" in fields and has(r.context): bits.append(f"context: {r.context}")
     if "subject" in fields: bits.append(f"subject: {r.subject.replace(',', ', ')}")
     if "credit" in fields:
-        bits.append(f"history: pants-fire {r.pants_fire_c}, false {r.false_c}, barely-true "
-                    f"{r.barely_true_c}, half-true {r.half_true_c}, mostly-true {r.mostly_true_c}")
+        bits.append(f"history: pants-fire {r.pants_on_fire_count}, false {r.false_count}, barely-true "
+                    f"{r.barely_true_count}, half-true {r.half_true_count}, mostly-true {r.mostly_true_count}")
     return " | ".join(bits)
 
 
-def build_text(df, fields):
+def build_text(df, fields, fmt="v1", raw=False):
     if not fields:
         return df["statement"].tolist()
+    if fmt == "v2":
+        fields = ["history" if f == "credit" else f for f in fields if f in metadata.FIELDS + ("credit",)]
+        return [metadata.text_with_meta(r, fields, "raw" if raw else "corrected") for r in df.itertuples()]
     return [f"{serialize(r, fields)} || {r.statement}" for r in df.itertuples()]
 
 
@@ -55,6 +62,8 @@ def main():
     ap.add_argument("--meta", choices=["none", "all"], default="none")
     ap.add_argument("--drop", default="", help="comma list of metadata fields to ablate")
     ap.add_argument("--raw-credit", action="store_true")
+    ap.add_argument("--meta-format", choices=["v1", "v2"], default="v1",
+                    help="v1: old line with speaker/subject; v2: shared line from metadata.py")
     ap.add_argument("--split", choices=["official", "disjoint"], default="official")
     ap.add_argument("--task", choices=["6way", "binary"], default="6way")
     ap.add_argument("--lr", type=float, default=2e-5)
@@ -68,10 +77,9 @@ def main():
     ap.add_argument("--bf16", action="store_true", help="bf16 instead of fp16 (default for *-large on GPUs that support it)")
     a = ap.parse_args()
 
-    tr, va, te = (load_split(s) for s in ["train", "valid", "test"])
-    if a.split == "disjoint":
-        tr, va, te = speaker_disjoint(pd.concat([tr, va, te], ignore_index=True))
-    if not a.raw_credit:
+    # v1 runs used original-case job/state/context; keep that so old and new runs match
+    tr, va, te = load_splits(a.split, lowercase=a.meta_format == "v2")
+    if not a.raw_credit and a.meta_format == "v1":
         tr, va, te = (correct_credit(d) for d in (tr, va, te))
     fields = [] if a.meta == "none" else [f for f in FIELDS if f not in a.drop.split(",")]
     target = "y" if a.task == "6way" else "y_bin"
@@ -79,7 +87,8 @@ def main():
 
     tok = AutoTokenizer.from_pretrained(a.model)
     def mk(df):
-        ds = Dataset.from_dict({"text": build_text(df, fields), "label": df[target].tolist()})
+        ds = Dataset.from_dict({"text": build_text(df, fields, a.meta_format, a.raw_credit),
+                                "label": df[target].tolist()})
         return ds.map(lambda b: tok(b["text"], truncation=True, max_length=a.max_len), batched=True)
     dtr, dva, dte = mk(tr), mk(va), mk(te)
 
@@ -90,7 +99,8 @@ def main():
         return {"acc": accuracy_score(p.label_ids, pred),
                 "macro_f1": f1_score(p.label_ids, pred, average="macro")}
 
-    name = (f"{a.model.split('/')[-1]}_{a.meta}{'-' + a.drop if a.drop else ''}"
+    meta_tag = a.meta + ("v2" if a.meta == "all" and a.meta_format == "v2" else "")
+    name = (f"{a.model.split('/')[-1]}_{meta_tag}{'-' + a.drop if a.drop else ''}"
             f"{'_rawcredit' if a.raw_credit else ''}_{a.split}_{a.task}_lr{a.lr:g}_s{a.seed}")
     cuda = torch.cuda.is_available()
     use_bf16 = cuda and torch.cuda.is_bf16_supported() and (a.bf16 or "large" in a.model)
