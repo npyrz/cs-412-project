@@ -16,4 +16,6 @@ The raw files have no header and 14 tab-separated columns. `src/data.py` loads t
 
 It strips whitespace, fills missing metadata with `unknown`, lowercases label/party/job/state/context, and adds `<count>_corr` columns (the counts with the row's own label removed).
 
-`data/splits/disjoint_{train,valid,test}.tsv` is the speaker-disjoint split (no speaker in more than one part). These files have a header, all the columns above plus the `_corr` columns, and are committed so everyone uses the same split. `src/make_splits.py` rebuilds them; `data.load_splits("disjoint")` gives the same rows.
+`data/splits/disjoint_{train,valid,test}.tsv` is the speaker-disjoint split (no speaker in more than one part). These files have a header, all the columns above plus the `_corr` columns, and are committed so everyone uses the same split. `src/make_splits.py` rebuilds them; `data.load_splits("disjoint")` gives the same rows. To read them without our code: `pd.read_csv(path, sep="\t", keep_default_na=False)`.
+
+Sizes: train 10,270, valid 1,283, test 1,283 (official: 10,269 / 1,284 / 1,283). Label shares stay within 2.8 points of the official split in every part.
