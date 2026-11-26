@@ -40,8 +40,8 @@
   },
   "missing_pct": {
     "speaker": 0.0,
-    "job": 27.84,
-    "state": 21.43,
+    "job": 27.85,
+    "state": 21.46,
     "party": 0.0,
     "context": 1.0,
     "subject": 0.0
@@ -67,7 +67,22 @@
     "donald-trump": 344,
     "hillary-clinton": 297,
     "mitt-romney": 216,
-    "john-mccain": 189
+    "john-mccain": 189,
+    "scott-walker": 184,
+    "chain-email": 178,
+    "rick-perry": 173,
+    "marco-rubio": 153,
+    "rick-scott": 150,
+    "ted-cruz": 119,
+    "bernie-s": 107,
+    "chris-christie": 105,
+    "facebook-posts": 100,
+    "charlie-crist": 90,
+    "newt-gingrich": 83,
+    "blog-posting": 81,
+    "jeb-bush": 79,
+    "joe-biden": 76,
+    "paul-ryan": 70
   },
   "speakers_with_1_stmt": 2056,
   "share_rows_top10_speakers": 19.5,
@@ -105,5 +120,10 @@
     "true": 14.9
   },
   "stmt_words_mean": 17.9,
-  "stmt_words_median": 17
+  "stmt_words_median": 17,
+  "own_label_count_ge1_pct_by_split": {
+    "train": 99.7,
+    "valid": 99.9,
+    "test": 99.5
+  }
 }
