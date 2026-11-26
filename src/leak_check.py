@@ -14,7 +14,7 @@ import numpy as np
 import pandas as pd
 from sklearn.metrics import accuracy_score, f1_score
 
-from data import COUNT_COLS, LABEL2COUNT, LABELS, correct_credit, load_split, speaker_disjoint
+from data import COUNT_COLS, LABEL2COUNT, LABELS, MISSING, correct_credit, load_split, speaker_disjoint
 
 ROOT = Path(__file__).resolve().parent.parent
 COUNT2LABEL = {v: k for k, v in LABEL2COUNT.items()}
@@ -25,7 +25,7 @@ def lookup_attack(tr, te):
     """tr/te already corrected. Returns (pred, resolved_mask)."""
     totals = {}
     for r in tr.itertuples():
-        if not r.speaker:
+        if r.speaker == MISSING:
             continue
         v = np.array([getattr(r, c) for c in COUNT_COLS])
         if r.label in LABEL2COUNT:
@@ -49,7 +49,7 @@ def lookup_attack(tr, te):
 def main():
     tr, va, te = (load_split(s) for s in ["train", "valid", "test"])
     allrows = pd.concat([tr, va, te], ignore_index=True)
-    named = allrows[allrows.speaker != ""]
+    named = allrows[allrows.speaker != MISSING]
     multi = named.groupby("speaker").filter(lambda g: len(g) > 1)
     const = (multi.groupby("speaker")[COUNT_COLS].nunique().max(axis=1) == 1).mean()
     out = {"history_constant_within_speaker": round(float(const), 4)}
