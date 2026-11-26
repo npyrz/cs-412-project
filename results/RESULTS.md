@@ -90,12 +90,16 @@ Full model minus one metadata field. Same leakage caveat as section 3.
 
 Credit counts are one snapshot per speaker (identical on 99.7% of multi-row speakers). The correction leaves `speaker_total - onehot(label)`. Training labels reveal each speaker's total, so for a seen speaker the gap between total and corrected history spells out the label. A lookup with no learning:
 
-| Split | Test rows resolved | Accuracy on resolved | Overall macro-F1 (acc) |
-|---|---|---|---|
-| official | 83.6% | 0.997 | 0.872 (0.859) |
-| disjoint | 0.0% | n/a | 0.057 (0.207) |
+| Split | Speaker matched by | Test rows resolved | Accuracy on resolved | Overall macro-F1 (acc) |
+|---|---|---|---|---|
+| official | speaker name | 83.6% | 0.997 | 0.872 (0.859) |
+| official | no name: history+party/job/state | 80.7% | 0.989 | 0.847 (0.831) |
+| official | no name: history only | 57.0% | 1.000 | 0.686 (0.649) |
+| disjoint | speaker name | 0.0% | n/a | 0.057 (0.207) |
+| disjoint | no name: history+party/job/state | 3.1% | 0.200 | 0.067 (0.207) |
+| disjoint | no name: history only | 3.5% | 0.222 | 0.070 (0.210) |
 
-Linear models can't exploit this (they can't do the per-speaker lookup), which is why LR with corrected credit stays near text-only. Transformers likely learn part of it on the official split, which would explain the corrected-credit results above raw credit for RoBERTa-large and the large run-to-run swings in section 5. On the speaker-disjoint split the lookup resolves nothing.
+Dropping the speaker name (the shared `metadata.py` line) does not remove the leak: the history counts alone pick out the speaker for most seen-speaker rows. Linear models can't exploit this (they can't do the per-speaker lookup), which is why LR with corrected credit stays near text-only. Transformers likely learn part of it on the official split, which would explain the corrected-credit results above raw credit for RoBERTa-large and the large run-to-run swings in section 5. On the speaker-disjoint split the lookup resolves almost nothing, and what it resolves is mostly wrong.
 
 ## Failed runs
 

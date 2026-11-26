@@ -135,14 +135,21 @@ def main():
                f"{LEAK['history_constant_within_speaker']:.1%} of multi-row speakers). The correction leaves "
                "`speaker_total - onehot(label)`. Training labels reveal each speaker's total, so for a seen speaker "
                "the gap between total and corrected history spells out the label. A lookup with no learning:", ""]
-        md.append(table(["Split", "Test rows resolved", "Accuracy on resolved", "Overall macro-F1 (acc)"],
-                        [[s, f"{LEAK[s]['resolved_frac']:.1%}",
-                          f"{LEAK[s]['acc_on_resolved']:.3f}" if LEAK[s]["acc_on_resolved"] is not None else "n/a",
-                          cell(LEAK[s])] for s in ["official", "disjoint"]]))
-        md += ["", "Linear models can't exploit this (they can't do the per-speaker lookup), which is why LR "
-               "with corrected credit stays near text-only. Transformers likely learn part of it on the official split, "
-               "which would explain the corrected-credit results above raw credit for RoBERTa-large and the large "
-               "run-to-run swings in section 5. On the speaker-disjoint split the lookup resolves nothing.", ""]
+        def lrow(split, how, m):
+            return [split, how, f"{m['resolved_frac']:.1%}",
+                    f"{m['acc_on_resolved']:.3f}" if m["acc_on_resolved"] is not None else "n/a", cell(m)]
+        rows = []
+        for s in ["official", "disjoint"]:
+            rows.append(lrow(s, "speaker name", LEAK[s]))
+            rows += [lrow(s, f"no name: {k}", m) for k, m in LEAK.get("no_name", {}).get(s, {}).items()]
+        md.append(table(["Split", "Speaker matched by", "Test rows resolved", "Accuracy on resolved",
+                         "Overall macro-F1 (acc)"], rows))
+        md += ["", "Dropping the speaker name (the shared `metadata.py` line) does not remove the leak: the history "
+               "counts alone pick out the speaker for most seen-speaker rows. Linear models can't exploit this "
+               "(they can't do the per-speaker lookup), which is why LR with corrected credit stays near text-only. "
+               "Transformers likely learn part of it on the official split, which would explain the corrected-credit "
+               "results above raw credit for RoBERTa-large and the large run-to-run swings in section 5. On the "
+               "speaker-disjoint split the lookup resolves almost nothing, and what it resolves is mostly wrong.", ""]
 
     failed = [k for k, r in TR.items() if r["val_macro_f1"] < DIVERGED]
     if failed:

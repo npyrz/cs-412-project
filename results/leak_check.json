@@ -7,6 +7,40 @@
     "macro_f1": 0.8721584523435216,
     "acc_on_resolved": 0.9972041006523765
   },
+  "no_name": {
+    "official": {
+      "history+party/job/state": {
+        "n_test": 1283,
+        "resolved_frac": 0.8067,
+        "acc": 0.8308651597817615,
+        "macro_f1": 0.8471225282775213,
+        "acc_on_resolved": 0.9893719806763285
+      },
+      "history only": {
+        "n_test": 1283,
+        "resolved_frac": 0.5698,
+        "acc": 0.6492595479345284,
+        "macro_f1": 0.6859998189014297,
+        "acc_on_resolved": 1.0
+      }
+    },
+    "disjoint": {
+      "history+party/job/state": {
+        "n_test": 1283,
+        "resolved_frac": 0.0312,
+        "acc": 0.2073265783320343,
+        "macro_f1": 0.06736659343128877,
+        "acc_on_resolved": 0.2
+      },
+      "history only": {
+        "n_test": 1283,
+        "resolved_frac": 0.0351,
+        "acc": 0.21044427123928294,
+        "macro_f1": 0.07003953379468782,
+        "acc_on_resolved": 0.2222222222222222
+      }
+    }
+  },
   "disjoint": {
     "n_test": 1283,
     "resolved_frac": 0.0,

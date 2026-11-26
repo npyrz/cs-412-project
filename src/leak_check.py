@@ -5,6 +5,11 @@ correct_credit() subtracts the row's own label, so corrected = speaker_total - o
 From training rows (labels known) we can rebuild each speaker's raw total. For a test row
 of a seen speaker, total - corrected is then a one-hot of the label (or all zero for `true`).
 This script runs that lookup with no learning and reports test accuracy / macro-F1.
+
+The shared metadata line (metadata.py) has no speaker name, so we also run the lookup
+without it: match the test row's history against every training speaker's total, either
+with nothing else or only among speakers with the same party/job/state. A row counts as
+resolved when exactly one label fits.
 Output: results/leak_check.json
 """
 import json
@@ -46,6 +51,34 @@ def lookup_attack(tr, te):
     return np.array(pred), np.array(resolved)
 
 
+def lookup_no_name(tr, te, keys=()):
+    """Like lookup_attack, but speakers are matched by history (+ optional columns), not name."""
+    totals = {}
+    for r in tr.itertuples():
+        v = [getattr(r, c) for c in COUNT_COLS]
+        if r.label in LABEL2COUNT:
+            v[COUNT_COLS.index(LABEL2COUNT[r.label])] += 1
+        totals.setdefault(tuple(getattr(r, k) for k in keys), set()).add(tuple(v))
+    pred, resolved = [], []
+    for r in te.itertuples():
+        t = totals.get(tuple(getattr(r, k) for k in keys), set())
+        c = [getattr(r, col) for col in COUNT_COLS]
+        cands = {LABELS.index("true")} if tuple(c) in t else set()
+        for i, col in enumerate(COUNT_COLS):
+            if tuple(x + (j == i) for j, x in enumerate(c)) in t:
+                cands.add(LABELS.index(COUNT2LABEL[col]))
+        resolved.append(len(cands) == 1)
+        pred.append(next(iter(cands)) if len(cands) == 1 else FALLBACK)
+    return np.array(pred), np.array(resolved)
+
+
+def score(y, pred, res):
+    return {"n_test": int(len(y)), "resolved_frac": round(float(res.mean()), 4),
+            "acc": float(accuracy_score(y, pred)),
+            "macro_f1": float(f1_score(y, pred, average="macro")),
+            "acc_on_resolved": float(accuracy_score(y[res], pred[res])) if res.any() else None}
+
+
 def main():
     tr, va, te = (load_split(s) for s in ["train", "valid", "test"])
     allrows = pd.concat([tr, va, te], ignore_index=True)
@@ -57,13 +90,12 @@ def main():
               "disjoint": (lambda s: (s[0], s[2]))(speaker_disjoint(allrows))}
     for name, (a, b) in splits.items():
         a, b = correct_credit(a), correct_credit(b)
-        pred, res = lookup_attack(a, b)
         y = b["y"].to_numpy()
-        out[name] = {"n_test": int(len(y)), "resolved_frac": round(float(res.mean()), 4),
-                     "acc": float(accuracy_score(y, pred)),
-                     "macro_f1": float(f1_score(y, pred, average="macro")),
-                     "acc_on_resolved": float(accuracy_score(y[res], pred[res])) if res.any() else None}
+        out[name] = score(y, *lookup_attack(a, b))
         print(name, {k: (round(v, 3) if isinstance(v, float) else v) for k, v in out[name].items()})
+        for label, keys in [("history+party/job/state", ("party", "job", "state")), ("history only", ())]:
+            out.setdefault("no_name", {}).setdefault(name, {})[label] = r = score(y, *lookup_no_name(a, b, keys))
+            print(f"  no name, {label}:", {k: (round(v, 3) if isinstance(v, float) else v) for k, v in r.items()})
     (ROOT / "results" / "leak_check.json").write_text(json.dumps(out, indent=2))
 
 
