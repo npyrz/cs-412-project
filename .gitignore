@@ -10,3 +10,5 @@ results/llm/cache_*.jsonl
 logs/
 archive.zip
 data/*.tsv
+CLAUDE.local.md
+venv/
