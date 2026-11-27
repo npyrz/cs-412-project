@@ -1,7 +1,7 @@
 """Shared scoring. Call evaluate() once after every run so all results are scored the same way.
 
     from evaluate import evaluate
-    evaluate({"model": "roberta-large", "input": "text+meta", "history": "corrected",
+    evaluate({"model": "roberta-large", "input": "text+meta", "history": "clean",
               "dropped": "none", "split": "disjoint", "shots": 0, "seed": 2},
              ids=test["id"], y_true=test["label"], y_pred=pred)
 
@@ -23,7 +23,7 @@ from data import LABELS
 
 RESULTS = Path(__file__).resolve().parent.parent / "results"
 KEYS = ["model", "input", "history", "dropped", "split", "shots", "seed"]
-ALLOWED = {"input": {"text", "text+meta"}, "history": {"raw", "corrected", "none"},
+ALLOWED = {"input": {"text", "text+meta"}, "history": {"clean", "raw", "corrected", "none"},
            "split": {"official", "disjoint"}}
 COLUMNS = (["run_name"] + KEYS + ["accuracy", "macro_f1", "weighted_f1", "binary_macro_f1"]
            + [f"{m}_{l}" for l in LABELS for m in ("precision", "recall")])

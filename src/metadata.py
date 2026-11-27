@@ -6,9 +6,11 @@ Usage:
   from data import load_splits
   from metadata import text_with_meta, text_only
   tr, va, te = load_splits("disjoint")
-  x = [text_with_meta(r) for r in tr.itertuples()]                          # all fields, corrected history
+  x = [text_with_meta(r) for r in tr.itertuples()]                          # all fields, clean history
   x = [text_with_meta(r, fields=fields_without("party")) for r in tr.itertuples()]  # ablation
   x = [text_with_meta(r, history="raw") for r in tr.itertuples()]           # leaky raw counts
+
+Rows must come from data.load_splits() for history="clean" (it adds the _clean columns).
 
 Rows can be pandas rows (iterrows / itertuples) or dicts with our column names.
   python metadata.py    # prints example lines
@@ -35,24 +37,25 @@ def _val(row, key):
     return v if v else "unknown"
 
 
-def serialize(row, fields=FIELDS, history="corrected"):
+def serialize(row, fields=FIELDS, history="clean"):
     """Metadata line for one row. Fields not in `fields` are left out entirely.
 
-    history: 'corrected' (own label removed, the _corr columns), 'raw' (as released, leaks
-    the label) or 'none' (same as leaving 'history' out of fields).
+    history: 'clean' (rebuilt from training labels only, the _clean columns; the only
+    leak-free option), 'corrected' (own label removed, still leaks other test labels),
+    'raw' (as released, leaks the row's own label) or 'none' (same as leaving it out).
     """
-    assert history in ("corrected", "raw", "none"), history
+    assert history in ("clean", "corrected", "raw", "none"), history
     unknown = set(fields) - set(FIELDS)
     assert not unknown, f"unknown fields {unknown}, expected some of {FIELDS}"
     bits = [f"{f}: {_val(row, f)}" for f in FIELDS if f in fields and f != "history"]
     if "history" in fields and history != "none":
-        suffix = "_corr" if history == "corrected" else ""
+        suffix = {"clean": "_clean", "corrected": "_corr", "raw": ""}[history]
         bits.append("history: " + ", ".join(f"{lab} {int(_get(row, col + suffix))}"
                                             for lab, col in HISTORY))
     return " | ".join(bits)
 
 
-def text_with_meta(row, fields=FIELDS, history="corrected"):
+def text_with_meta(row, fields=FIELDS, history="clean"):
     meta = serialize(row, fields, history)
     stmt = str(_get(row, "statement"))
     return f"{meta} || statement: {stmt}" if meta else text_only(row)
@@ -63,11 +66,12 @@ def text_only(row):
 
 
 if __name__ == "__main__":
-    from data import load_split
-    rows = load_split("train").head(3)
+    from data import load_splits
+    rows = load_splits("official")[0].head(3)
     for r in rows.itertuples():
         print("all fields:     ", text_with_meta(r))
         print("without party:  ", text_with_meta(r, fields_without("party")))
         print("without history:", text_with_meta(r, fields_without("history")))
         print("raw history:    ", serialize(r, history="raw"))
+        print("corrected:      ", serialize(r, history="corrected"))
         print()
