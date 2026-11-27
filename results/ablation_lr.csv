@@ -1,0 +1,13 @@
+split,dropped,macro_f1,change
+official,none,0.252499,0.0
+official,party,0.256306,0.0038
+official,state,0.255162,0.0027
+official,job,0.265025,0.0125
+official,context,0.24995,-0.0025
+official,history,0.254249,0.0018
+disjoint,none,0.223565,0.0
+disjoint,party,0.221041,-0.0025
+disjoint,state,0.227165,0.0036
+disjoint,job,0.226995,0.0034
+disjoint,context,0.230655,0.0071
+disjoint,history,0.234953,0.0114
