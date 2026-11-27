@@ -11,7 +11,7 @@ Full result tables: [`results/RESULTS.md`](results/RESULTS.md) (generated from t
 | Milestone | Status |
 |---|---|
 | 3.1 Data prep and analysis | Done. Shared loader, metadata line, scoring code and speaker-disjoint split files are in (Nov 25) |
-| 3.2 TF-IDF + LR baseline | Done (official and speaker-disjoint splits, 6-way and binary, field ablation, per-party errors) |
+| 3.2 TF-IDF + LR baseline | Done. Final runs (`baseline_lr.py`, Nov 27): 8 runs + 10 ablations on both splits in `results/runs.csv`, ablation table in `results/ablation_lr.csv` |
 | 3.3 Transformers, text only | Done: BERT/RoBERTa base and large, LR grid for base models. RoBERTa-large 6-way diverged and needs a rerun |
 | 3.4 Metadata in transformers | Done for all four models (raw and corrected credit), RoBERTa-base field ablation and disjoint split (3 seeds for RoBERTa-base). Corrected-credit numbers on the official split are leaky (see findings) |
 | 3.5 Intermediate report | Written for Nov 1 (Section 4 text in `report/`) |
@@ -25,25 +25,28 @@ All test macro-F1, 6-way, seed 412 unless a mean over seeds is given. With 1,283
 
 1. **Raw credit history leaks the label.** LIAR's credit counts include the statement being classified. Logistic regression goes from 0.254 (text) to 0.418 with raw metadata, but only to 0.266 once `data.correct_credit()` removes the row's own label. About 93% of the metadata gain is leakage.
 2. **The correction is not enough for models that can memorize speakers.** The counts are one snapshot per speaker, so the corrected history is `speaker_total - onehot(label)`. Training labels reveal each speaker's total. A lookup with no learning (`src/leak_check.py`) uses this to label 83.6% of official test rows at 99.7% accuracy, for 0.872 macro-F1 overall. Leaving the speaker name out doesn't help: history plus party/job/state still labels 80.7% of rows (0.847 macro-F1), and history alone 57.0% (0.686). LR can't do this lookup. Transformers seem to partly learn it: RoBERTa-large with *corrected* credit scores 0.503, above its raw-credit run (0.481). On the speaker-disjoint split the lookup finds nothing.
-3. **Transformers beat TF-IDF on text alone, but model size doesn't help.** Text-only: LR 0.254, BERT-base 0.286, RoBERTa-base 0.284, BERT-large 0.283. Binary: 0.631 to 0.640 for every model.
-4. **For unseen speakers, honest metadata adds nothing.** On the speaker-disjoint split, corrected metadata gives LR 0.225 vs 0.227 for text, and RoBERTa-base 0.265 ± 0.031 vs 0.281 ± 0.013 for text (mean ± SD over 3 seeds). On the official split the same RoBERTa-base comparison is 0.369 ± 0.013 vs 0.287 ± 0.004, and that gap is the leak. Raw credit still "helps" on the disjoint split (LR 0.406, RoBERTa-base 0.431) only because it contains the label.
-5. **Leave-one-field-out results for RoBERTa-base are unstable.** Rerunning seed 412 with a different batch setup moved the full model from 0.315 to 0.381 and single ablations by up to 0.09. They aren't usable on the official split while history leaks. Only dropping credit brings it back to text level (0.295).
+   **Fix:** the counts turn out to be the speaker's labels summed over all of LIAR, test set included (96.9% of speakers match exactly, and no count comes from outside the dataset), so no subtraction can clean them. `data.add_clean_history()` rebuilds the history from training labels only (`history="clean"` in `metadata.py`, `--clean-credit` in `finetune_transformer.py`). On the clean history the same lookups fall to chance (macro-F1 0.06-0.10), and its columns don't change when test labels are shuffled. Metadata runs from now on should use it.
+3. **With leak-free history, metadata adds nothing to LR.** Final LR runs (`results/runs.csv`): text 0.253, text + metadata with clean history 0.252 on the official split; 0.231 vs 0.224 on the disjoint split. Raw history gives 0.438 / 0.411, all leak. Every single-field ablation stays within 0.013, which is noise.
+4. **Transformers beat TF-IDF on text alone, but model size doesn't help.** Text-only: LR 0.254, BERT-base 0.286, RoBERTa-base 0.284, BERT-large 0.283. Binary: 0.631 to 0.640 for every model.
+5. **For unseen speakers, honest metadata adds nothing.** On the speaker-disjoint split, corrected metadata gives LR 0.225 vs 0.227 for text, and RoBERTa-base 0.265 ± 0.031 vs 0.281 ± 0.013 for text (mean ± SD over 3 seeds). On the official split the same RoBERTa-base comparison is 0.369 ± 0.013 vs 0.287 ± 0.004, and that gap is the leak. Raw credit still "helps" on the disjoint split (LR 0.406, RoBERTa-base 0.431) only because it contains the label.
+6. **Leave-one-field-out results for RoBERTa-base are unstable.** Rerunning seed 412 with a different batch setup moved the full model from 0.315 to 0.381 and single ablations by up to 0.09. They aren't usable on the official split while history leaks. Only dropping credit brings it back to text level (0.295).
 
 ## What needs deciding next
-- How to handle credit history for the final report. Proposal: the speaker-disjoint split is the headline metadata result; on the official split, add text+meta runs without history and report the corrected-history runs only as the leaky reference.
+- Rerun metadata runs with the clean history (`--clean-credit`). The corrected-history runs so far stay in the report only as the leaky reference. The speaker-disjoint split stays the test for unseen speakers (they have no history there).
 - Rerun RoBERTa-large text-only 6-way (diverged: loss stayed above ln 6 and it predicts one class). Try another seed or lr 5e-6.
 - Run the LLM experiments (3.6), then seeds 1-3 and bootstrap CIs for the final tables.
 
 ## Layout
 - `data/raw/` LIAR TSVs go here (not committed, see `data/README.md` for source and MD5s)
 - `data/splits/` speaker-disjoint split as TSVs (committed)
-- `src/data.py` loading with our column names, `_corr` columns, `load_splits("official"|"disjoint")`
+- `src/data.py` loading with our column names, `_corr` columns, `load_splits("official"|"disjoint")` (adds the leak-free `_clean` history)
 - `src/metadata.py` the shared metadata line: `text_with_meta(row, fields, history)`
 - `src/evaluate.py` shared scoring: `evaluate(run_info, ids, y_true, y_pred)` -> `results/runs.csv`, `results/predictions/<run_name>.csv`
 - `src/make_splits.py` writes `data/splits/`
-- `tests/` tests for the scoring code (`python -m pytest tests`)
+- `tests/` tests for the scoring code and the clean history (`python -m pytest tests`)
 - `src/analyze_data.py` dataset stats -> `results/eda.txt`, `results/data_stats.json`, `results/label_dist.{pdf,png}`
-- `src/baseline_lr.py` LR grid, field ablation, per-party errors -> `results/lr_results.json` (about 5 min on CPU)
+- `src/baseline_lr.py` final LR runs (text, + meta with raw / corrected / clean history, ablations) -> `results/runs.csv`, `results/predictions/`, `results/ablation_lr.csv` (about 2 min on CPU)
+- `src/baseline_lr_v1.py` the intermediate-report LR grid -> `results/lr_results.json`
 - `src/finetune_transformer.py` one BERT/RoBERTa run -> `results/transformers/<run>.json` (val history and test predictions included)
 - `src/run_grid.py` the full transformer grid, skips finished runs. Base models first, then large
 - `src/leak_check.py` residual credit-history leak test -> `results/leak_check.json`

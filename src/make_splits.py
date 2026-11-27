@@ -4,12 +4,13 @@
 
 The split is data.speaker_disjoint(seed=412): speakers with more than 2% of all rows
 (Obama, Trump, Clinton) are kept in train, the rest are shuffled and assigned greedily
-until valid and test each hold about 10% of rows. Files have a header, our column names
-and the _corr columns. Prints sizes and label mix next to the official split.
+until valid and test each hold about 10% of rows. Files have a header, our column names,
+the _corr columns and the _clean columns (history from training labels only).
+Prints sizes and label mix next to the official split.
 """
 import pandas as pd
 
-from data import COLS, CORR_COLS, LABELS, SPLIT_DIR, load_splits
+from data import CLEAN_COLS, COLS, CORR_COLS, LABELS, SPLIT_DIR, load_splits
 
 PARTS = ["train", "valid", "test"]
 
@@ -26,7 +27,7 @@ def main():
 
     SPLIT_DIR.mkdir(parents=True, exist_ok=True)
     for p, d in disjoint.items():
-        d[COLS + CORR_COLS].to_csv(SPLIT_DIR / f"disjoint_{p}.tsv", sep="\t", index=False)
+        d[COLS + CORR_COLS + CLEAN_COLS].to_csv(SPLIT_DIR / f"disjoint_{p}.tsv", sep="\t", index=False)
 
     print("Speaker overlap between parts: 0")
     print(f"{'':12}" + "".join(f"{s + ' ' + p:>18}" for p in PARTS for s in ["off", "dis"]))

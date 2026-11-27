@@ -5,6 +5,11 @@
 Files: data/raw/{train,valid,test}.tsv (LIAR v1, no header, 14 columns).
 Cleaning: strip whitespace, missing metadata -> 'unknown', lowercase label/party/job/state/context.
 Each row also gets <count>_corr columns: the credit counts with the row's own label removed.
+
+load_splits() also adds <count>_clean columns: history rebuilt from training labels only
+(see add_clean_history). Use these for any metadata run. LIAR's own counts are the
+speaker's labels summed over the whole dataset, test set included, so both the raw and
+the corrected counts leak test labels for speakers seen in training.
 """
 from pathlib import Path
 
@@ -23,6 +28,8 @@ LABEL2ID = {l: i for i, l in enumerate(LABELS)}
 COUNT_COLS = ["pants_on_fire_count", "false_count", "barely_true_count", "half_true_count",
               "mostly_true_count"]
 CORR_COLS = [c + "_corr" for c in COUNT_COLS]
+CLEAN_COLS = [c + "_clean" for c in COUNT_COLS]
+CLEAN_FOLDS = 5
 # label -> credit-history column that counts it ("true" has no column in LIAR)
 LABEL2COUNT = {"pants-fire": "pants_on_fire_count", "false": "false_count",
                "barely-true": "barely_true_count", "half-true": "half_true_count",
@@ -82,6 +89,29 @@ def correct_credit(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
+def add_clean_history(tr, va, te, k=CLEAN_FOLDS, seed=412):
+    """Add <count>_clean columns built from training labels only. Returns copies.
+
+    valid/test rows: counts of the speaker's labels in train (0 for unseen speakers).
+    train rows: the same, but counting only train rows in the other k-1 folds, so a row's
+    own label (and its fold-mates' labels) never appear in its own history.
+    No valid or test label is used anywhere.
+    """
+    tr, va, te = tr.copy(), va.copy(), te.copy()
+    onehot = pd.DataFrame(0, index=tr.index, columns=COUNT_COLS)
+    for lab, col in LABEL2COUNT.items():
+        onehot.loc[tr["label"] == lab, col] = 1
+    spk = tr["speaker"].to_numpy()
+    fold = np.random.default_rng(seed).permutation(len(tr)) % k
+    total = onehot.groupby(spk).sum()
+    in_fold = onehot.groupby([spk, fold]).sum()
+    tr[CLEAN_COLS] = (total.loc[spk].to_numpy()
+                      - in_fold.loc[list(zip(spk, fold))].to_numpy())
+    for d in (va, te):
+        d[CLEAN_COLS] = total.reindex(d["speaker"]).fillna(0).astype(int).to_numpy()
+    return tr, va, te
+
+
 def speaker_disjoint(df: pd.DataFrame, seed: int = 412):
     """Re-split all 12.8k statements so no speaker appears in more than one split.
 
@@ -115,11 +145,11 @@ def load_splits(split: str = "official", lowercase: bool = True):
     it matches data/splits/disjoint_*.tsv row for row.
     """
     tr, va, te = (load_split(s, lowercase) for s in ["train", "valid", "test"])
-    if split == "official":
-        return tr, va, te
     if split == "disjoint":
-        return speaker_disjoint(pd.concat([tr, va, te], ignore_index=True))
-    raise ValueError(f"split must be 'official' or 'disjoint', got {split!r}")
+        tr, va, te = speaker_disjoint(pd.concat([tr, va, te], ignore_index=True))
+    elif split != "official":
+        raise ValueError(f"split must be 'official' or 'disjoint', got {split!r}")
+    return add_clean_history(tr, va, te)
 
 
 if __name__ == "__main__":

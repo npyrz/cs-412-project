@@ -6,8 +6,9 @@ Examples:
   python finetune_transformer.py --model roberta-large --meta all --drop credit --lr 1e-5
   python finetune_transformer.py --model roberta-base --meta all --task binary --seed 2
 
-Metadata is serialized as text and prepended to the statement, with the
-corrected credit history (own label removed) unless --raw-credit is passed.
+Metadata is serialized as text and prepended to the statement. Credit history:
+corrected (own label removed; still leaks other test labels, the default so old runs
+reproduce), --clean-credit (rebuilt from training labels only, leak-free) or --raw-credit.
 --meta-format v1 (default) is the format of all runs so far (speaker and subject included).
 --meta-format v2 is the shared team line from metadata.py (party, job, state, context, history).
 Results go to results/transformers/<run-name>.json.
@@ -25,7 +26,7 @@ from transformers import (AutoModelForSequenceClassification, AutoTokenizer,
 from datasets import Dataset
 
 import metadata
-from data import LABELS, MISSING, correct_credit, load_splits
+from data import CLEAN_COLS, COUNT_COLS, LABELS, MISSING, correct_credit, load_splits
 
 ROOT = Path(__file__).resolve().parent.parent
 FIELDS = ["party", "speaker", "job", "state", "context", "subject", "credit"]
@@ -47,12 +48,12 @@ def serialize(r, fields):
     return " | ".join(bits)
 
 
-def build_text(df, fields, fmt="v1", raw=False):
+def build_text(df, fields, fmt="v1", hist="corrected"):
     if not fields:
         return df["statement"].tolist()
     if fmt == "v2":
         fields = ["history" if f == "credit" else f for f in fields if f in metadata.FIELDS + ("credit",)]
-        return [metadata.text_with_meta(r, fields, "raw" if raw else "corrected") for r in df.itertuples()]
+        return [metadata.text_with_meta(r, fields, hist) for r in df.itertuples()]
     return [f"{serialize(r, fields)} || {r.statement}" for r in df.itertuples()]
 
 
@@ -62,6 +63,8 @@ def main():
     ap.add_argument("--meta", choices=["none", "all"], default="none")
     ap.add_argument("--drop", default="", help="comma list of metadata fields to ablate")
     ap.add_argument("--raw-credit", action="store_true")
+    ap.add_argument("--clean-credit", action="store_true",
+                    help="history rebuilt from training labels only (data.add_clean_history)")
     ap.add_argument("--meta-format", choices=["v1", "v2"], default="v1",
                     help="v1: old line with speaker/subject; v2: shared line from metadata.py")
     ap.add_argument("--split", choices=["official", "disjoint"], default="official")
@@ -79,15 +82,20 @@ def main():
 
     # v1 runs used original-case job/state/context; keep that so old and new runs match
     tr, va, te = load_splits(a.split, lowercase=a.meta_format == "v2")
-    if not a.raw_credit and a.meta_format == "v1":
+    assert not (a.raw_credit and a.clean_credit), "pick one of --raw-credit / --clean-credit"
+    hist = "raw" if a.raw_credit else "clean" if a.clean_credit else "corrected"
+    if a.meta_format == "v1" and hist == "corrected":
         tr, va, te = (correct_credit(d) for d in (tr, va, te))
+    elif a.meta_format == "v1" and hist == "clean":
+        for d in (tr, va, te):
+            d[COUNT_COLS] = d[CLEAN_COLS].to_numpy()
     fields = [] if a.meta == "none" else [f for f in FIELDS if f not in a.drop.split(",")]
     target = "y" if a.task == "6way" else "y_bin"
     labels = LABELS if a.task == "6way" else ["false-leaning", "true-leaning"]
 
     tok = AutoTokenizer.from_pretrained(a.model)
     def mk(df):
-        ds = Dataset.from_dict({"text": build_text(df, fields, a.meta_format, a.raw_credit),
+        ds = Dataset.from_dict({"text": build_text(df, fields, a.meta_format, hist),
                                 "label": df[target].tolist()})
         return ds.map(lambda b: tok(b["text"], truncation=True, max_length=a.max_len), batched=True)
     dtr, dva, dte = mk(tr), mk(va), mk(te)
@@ -101,7 +109,8 @@ def main():
 
     meta_tag = a.meta + ("v2" if a.meta == "all" and a.meta_format == "v2" else "")
     name = (f"{a.model.split('/')[-1]}_{meta_tag}{'-' + a.drop if a.drop else ''}"
-            f"{'_rawcredit' if a.raw_credit else ''}_{a.split}_{a.task}_lr{a.lr:g}_s{a.seed}")
+            f"{'_rawcredit' if a.raw_credit else ''}{'_cleancredit' if a.clean_credit else ''}"
+            f"_{a.split}_{a.task}_lr{a.lr:g}_s{a.seed}")
     cuda = torch.cuda.is_available()
     use_bf16 = cuda and torch.cuda.is_bf16_supported() and (a.bf16 or "large" in a.model)
     args = TrainingArguments(
