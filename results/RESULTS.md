@@ -101,6 +101,19 @@ Credit counts are one snapshot per speaker (identical on 99.7% of multi-row spea
 
 Dropping the speaker name (the shared `metadata.py` line) does not remove the leak: the history counts alone pick out the speaker for most seen-speaker rows. Linear models can't exploit this (they can't do the per-speaker lookup), which is why LR with corrected credit stays near text-only. Transformers likely learn part of it on the official split, which would explain the corrected-credit results above raw credit for RoBERTa-large and the large run-to-run swings in section 5. On the speaker-disjoint split the lookup resolves almost nothing, and what it resolves is mostly wrong.
 
+**Root cause and fix.** For 96.9% of speakers the counts equal the speaker's labels summed over all of LIAR, test set included; 0 counts come from outside the dataset. So any version of these counts carries test labels. `data.add_clean_history` rebuilds the history from training labels only (train rows: out-of-fold, 5 folds; valid/test rows: the speaker's train counts). The same lookups on the clean history:
+
+| Split | Speaker matched by | Test rows resolved | Accuracy on resolved | Overall macro-F1 (acc) |
+|---|---|---|---|---|
+| official | speaker name | 14.7% | 0.175 | 0.083 (0.202) |
+| official | history+party/job/state | 38.8% | 0.187 | 0.099 (0.200) |
+| official | history only | 9.8% | 0.111 | 0.070 (0.197) |
+| disjoint | speaker name | 0.0% | n/a | 0.057 (0.207) |
+| disjoint | history+party/job/state | 6.5% | 0.157 | 0.074 (0.208) |
+| disjoint | history only | 0.0% | n/a | 0.057 (0.207) |
+
+Clean history columns are identical when valid/test labels are shuffled: official True, disjoint True.
+
 ## Failed runs
 
 - `roberta-large_none_official_6way_lr1e-05_s412`: collapsed to a single class (val macro-F1 0.055). Needs a rerun with another seed or LR.

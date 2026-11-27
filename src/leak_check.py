@@ -10,6 +10,12 @@ The shared metadata line (metadata.py) has no speaker name, so we also run the l
 without it: match the test row's history against every training speaker's total, either
 with nothing else or only among speakers with the same party/job/state. A row counts as
 resolved when exactly one label fits.
+
+Root cause: for ~97% of speakers the counts equal the speaker's labels summed over all of
+LIAR (train + valid + test), so they carry test labels whatever we subtract. The fix is
+data.add_clean_history (history from training labels only). This script checks that the
+clean columns don't change when valid/test labels are shuffled, and runs the same lookups
+on them.
 Output: results/leak_check.json
 """
 import json
@@ -19,7 +25,8 @@ import numpy as np
 import pandas as pd
 from sklearn.metrics import accuracy_score, f1_score
 
-from data import COUNT_COLS, LABEL2COUNT, LABELS, MISSING, correct_credit, load_split, speaker_disjoint
+from data import (CLEAN_COLS, COUNT_COLS, LABEL2COUNT, LABELS, MISSING, add_clean_history,
+                  correct_credit, load_split, speaker_disjoint)
 
 ROOT = Path(__file__).resolve().parent.parent
 COUNT2LABEL = {v: k for k, v in LABEL2COUNT.items()}
@@ -86,6 +93,15 @@ def main():
     multi = named.groupby("speaker").filter(lambda g: len(g) > 1)
     const = (multi.groupby("speaker")[COUNT_COLS].nunique().max(axis=1) == 1).mean()
     out = {"history_constant_within_speaker": round(float(const), 4)}
+    # what the counts are: the speaker's labels summed over the whole dataset?
+    snap = named.groupby("speaker")[COUNT_COLS].agg(lambda c: c.mode().iloc[0])
+    inds = (pd.crosstab(named.speaker, named.label).reindex(columns=list(LABEL2COUNT), fill_value=0)
+            .rename(columns=LABEL2COUNT)[COUNT_COLS])
+    out["history_equals_dataset_label_counts_pct_speakers"] = round(float((snap == inds).all(axis=1).mean() * 100), 1)
+    out["history_counts_from_outside_dataset"] = int((snap - inds).clip(lower=0).to_numpy().sum())
+    print(f"history = speaker's labels summed over the dataset for "
+          f"{out['history_equals_dataset_label_counts_pct_speakers']}% of speakers; "
+          f"counts from outside the dataset: {out['history_counts_from_outside_dataset']}")
     splits = {"official": (tr, te),
               "disjoint": (lambda s: (s[0], s[2]))(speaker_disjoint(allrows))}
     for name, (a, b) in splits.items():
@@ -96,6 +112,26 @@ def main():
         for label, keys in [("history+party/job/state", ("party", "job", "state")), ("history only", ())]:
             out.setdefault("no_name", {}).setdefault(name, {})[label] = r = score(y, *lookup_no_name(a, b, keys))
             print(f"  no name, {label}:", {k: (round(v, 3) if isinstance(v, float) else v) for k, v in r.items()})
+    # clean history: must not depend on valid/test labels, and the lookups should find nothing
+    rng = np.random.default_rng(0)
+    splits3 = {"official": (tr, va, te), "disjoint": speaker_disjoint(allrows)}
+    for name, (a, v, b) in splits3.items():
+        a, v, b = add_clean_history(a, v, b)
+        shuf = [d.assign(label=rng.permutation(d["label"].to_numpy())) for d in (v, b)]
+        _, v2, b2 = add_clean_history(a, *shuf)
+        unchanged = bool((v2[CLEAN_COLS].to_numpy() == v[CLEAN_COLS].to_numpy()).all()
+                         and (b2[CLEAN_COLS].to_numpy() == b[CLEAN_COLS].to_numpy()).all())
+        a, b = (d.assign(**{c: d[cc] for c, cc in zip(COUNT_COLS, CLEAN_COLS)}) for d in (a, b))
+        y = b["y"].to_numpy()
+        r = out.setdefault("clean", {})[name] = {
+            "unchanged_when_test_labels_shuffled": unchanged,
+            "test_history_constant_within_speaker": bool(
+                (b.groupby("speaker")[CLEAN_COLS].nunique().max(axis=1) == 1).all()),
+            "speaker name": score(y, *lookup_attack(a, b)),
+            "history+party/job/state": score(y, *lookup_no_name(a, b, ("party", "job", "state"))),
+            "history only": score(y, *lookup_no_name(a, b, ()))}
+        print(f"{name} clean: unchanged when test labels shuffled {unchanged}; lookups:",
+              {k: round(m["macro_f1"], 3) for k, m in r.items() if isinstance(m, dict)})
     (ROOT / "results" / "leak_check.json").write_text(json.dumps(out, indent=2))
 
 

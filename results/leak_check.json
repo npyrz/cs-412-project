@@ -1,5 +1,7 @@
 {
   "history_constant_within_speaker": 0.9968,
+  "history_equals_dataset_label_counts_pct_speakers": 96.9,
+  "history_counts_from_outside_dataset": 0,
   "official": {
     "n_test": 1283,
     "resolved_frac": 0.8363,
@@ -47,5 +49,57 @@
     "acc": 0.20654715510522215,
     "macro_f1": 0.05706287683031869,
     "acc_on_resolved": null
+  },
+  "clean": {
+    "official": {
+      "unchanged_when_test_labels_shuffled": true,
+      "test_history_constant_within_speaker": true,
+      "speaker name": {
+        "n_test": 1283,
+        "resolved_frac": 0.1473,
+        "acc": 0.20187061574434917,
+        "macro_f1": 0.0828514572618173,
+        "acc_on_resolved": 0.1746031746031746
+      },
+      "history+party/job/state": {
+        "n_test": 1283,
+        "resolved_frac": 0.3882,
+        "acc": 0.20031176929072486,
+        "macro_f1": 0.09904426027223277,
+        "acc_on_resolved": 0.18674698795180722
+      },
+      "history only": {
+        "n_test": 1283,
+        "resolved_frac": 0.0982,
+        "acc": 0.19719407638347622,
+        "macro_f1": 0.07010891604313578,
+        "acc_on_resolved": 0.1111111111111111
+      }
+    },
+    "disjoint": {
+      "unchanged_when_test_labels_shuffled": true,
+      "test_history_constant_within_speaker": true,
+      "speaker name": {
+        "n_test": 1283,
+        "resolved_frac": 0.0,
+        "acc": 0.20654715510522215,
+        "macro_f1": 0.05706287683031869,
+        "acc_on_resolved": null
+      },
+      "history+party/job/state": {
+        "n_test": 1283,
+        "resolved_frac": 0.0647,
+        "acc": 0.20810600155884645,
+        "macro_f1": 0.07408832744532624,
+        "acc_on_resolved": 0.1566265060240964
+      },
+      "history only": {
+        "n_test": 1283,
+        "resolved_frac": 0.0,
+        "acc": 0.20654715510522215,
+        "macro_f1": 0.05706287683031869,
+        "acc_on_resolved": null
+      }
+    }
   }
 }

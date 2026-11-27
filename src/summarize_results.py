@@ -150,6 +150,23 @@ def main():
                "Transformers likely learn part of it on the official split, which would explain the corrected-credit "
                "results above raw credit for RoBERTa-large and the large run-to-run swings in section 5. On the "
                "speaker-disjoint split the lookup resolves almost nothing, and what it resolves is mostly wrong.", ""]
+        if "clean" in LEAK:
+            md += ["**Root cause and fix.** For "
+                   f"{LEAK['history_equals_dataset_label_counts_pct_speakers']}% of speakers the counts equal the "
+                   "speaker's labels summed over all of LIAR, test set included; "
+                   f"{LEAK['history_counts_from_outside_dataset']} counts come from outside the dataset. "
+                   "So any version of these counts carries test labels. `data.add_clean_history` rebuilds the "
+                   "history from training labels only (train rows: out-of-fold, 5 folds; valid/test rows: the "
+                   "speaker's train counts). The same lookups on the clean history:", ""]
+            rows = []
+            for s in ["official", "disjoint"]:
+                c = LEAK["clean"][s]
+                rows += [lrow(s, k, c[k]) for k in ["speaker name", "history+party/job/state", "history only"]]
+            md.append(table(["Split", "Speaker matched by", "Test rows resolved", "Accuracy on resolved",
+                             "Overall macro-F1 (acc)"], rows))
+            md += ["", "Clean history columns are identical when valid/test labels are shuffled: "
+                   + ", ".join(f"{s} {LEAK['clean'][s]['unchanged_when_test_labels_shuffled']}"
+                               for s in ["official", "disjoint"]) + ".", ""]
 
     failed = [k for k, r in TR.items() if r["val_macro_f1"] < DIVERGED]
     if failed:
